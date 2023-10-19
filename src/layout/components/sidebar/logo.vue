@@ -1,38 +1,58 @@
 <script setup lang="ts">
-import { getTopMenu } from "@/router/utils";
 import { useNav } from "@/layout/hooks/useNav";
-
+import { storageSession } from "@pureadmin/utils";
+import SelectChannel from "@/views/component/dialog/selectChannel.vue";
+import { ref } from "vue";
 const props = defineProps({
   collapse: Boolean
 });
 
 const { title } = useNav();
+const storage = storageSession();
+const channel_id = storage.getItem("channel_id");
+const channels: any = storage.getItem("channels");
+const selectedChannel = (): any => {
+  let result: any = {};
+  channels.forEach(element => {
+    if (element.id == channel_id) {
+      result = element;
+    }
+  });
+  return result;
+};
+const formDialogVisible = ref(false);
+console.log(selectedChannel().headImg);
 </script>
 
 <template>
   <div class="sidebar-logo-container" :class="{ collapses: props.collapse }">
     <transition name="sidebarLogoFade">
-      <router-link
+      <div
         v-if="props.collapse"
         key="props.collapse"
         :title="title"
         class="sidebar-logo-link"
-        :to="getTopMenu()?.path ?? '/'"
+        @click="formDialogVisible = true"
       >
-        <img src="/logo.svg" alt="logo" />
-        <span class="sidebar-title">{{ title }}</span>
-      </router-link>
-      <router-link
+        <img :src="selectedChannel().headImg" alt="logo" />
+        <span class="sidebar-title">{{ selectedChannel().nickName }}</span>
+      </div>
+      <div
         v-else
         key="expand"
         :title="title"
         class="sidebar-logo-link"
-        :to="getTopMenu()?.path ?? '/'"
+        @click="formDialogVisible = true"
       >
-        <img src="/logo.svg" alt="logo" />
-        <span class="sidebar-title">{{ title }}</span>
-      </router-link>
+        <img :src="selectedChannel().headImg" alt="logo" />
+        <span class="sidebar-title">{{ selectedChannel().nickName }}</span>
+      </div>
     </transition>
+    <SelectChannel
+      v-model:visible="formDialogVisible"
+      :selectedChannel="selectedChannel()"
+      :channels="channels"
+    />
   </div>
 </template>
 
@@ -59,7 +79,7 @@ const { title } = useNav();
       height: 32px;
       margin: 2px 0 0 12px;
       overflow: hidden;
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 600;
       line-height: 32px;
       color: $subMenuActiveText;

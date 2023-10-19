@@ -1,4 +1,5 @@
 import { cdn } from "./cdn";
+import { resolve } from "path";
 import vue from "@vitejs/plugin-vue";
 import { viteBuildInfo } from "./info";
 import svgLoader from "vite-svg-loader";
@@ -9,6 +10,7 @@ import { configCompressPlugin } from "./compress";
 import { visualizer } from "rollup-plugin-visualizer";
 import removeConsole from "vite-plugin-remove-console";
 import themePreprocessorPlugin from "@pureadmin/theme";
+import VueI18nPlugin from "@intlify/unplugin-vue-i18n/vite";
 import { genScssMultipleScopeVars } from "../src/layout/theme";
 
 export function getPluginsList(
@@ -20,6 +22,11 @@ export function getPluginsList(
   const lifecycle = process.env.npm_lifecycle_event;
   return [
     vue(),
+    VueI18nPlugin({
+      runtimeOnly: true,
+      compositionOnly: true,
+      include: [resolve("locales/**")]
+    }),
     // jsx、tsx语法支持
     vueJsx(),
     VITE_CDN ? cdn : null,

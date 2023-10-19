@@ -9,11 +9,13 @@ import {
   PureHttpResponse,
   PureHttpRequestConfig
 } from "./types.d";
+import { storageSession } from "@pureadmin/utils";
 import { stringify } from "qs";
 import NProgress from "../progress";
 import { getToken, formatToken } from "@/utils/auth";
 import { useUserStoreHook } from "@/store/modules/user";
 
+const storage = storageSession();
 // 相关配置请参考：www.axios-js.com/zh-cn/docs/#axios-request-config-1
 const defaultConfig: AxiosRequestConfig = {
   // 请求超时时间
@@ -72,42 +74,15 @@ class PureHttp {
           PureHttp.initConfig.beforeRequestCallback(config);
           return config;
         }
-        /** 请求白名单，放置一些不需要token的接口（通过设置请求白名单，防止token过期后再请求造成的死循环问题） */
-        const whiteList = ["/refreshToken", "/login"];
-        return whiteList.some(v => config.url.indexOf(v) > -1)
-          ? config
-          : new Promise(resolve => {
-              const data = getToken();
-              if (data) {
-                const now = new Date().getTime();
-                const expired = parseInt(data.expires) - now <= 0;
-                if (expired) {
-                  if (!PureHttp.isRefreshing) {
-                    PureHttp.isRefreshing = true;
-                    // token过期刷新
-                    useUserStoreHook()
-                      .handRefreshToken({ refreshToken: data.refreshToken })
-                      .then(res => {
-                        const token = res.data.accessToken;
-                        config.headers["Authorization"] = formatToken(token);
-                        PureHttp.requests.forEach(cb => cb(token));
-                        PureHttp.requests = [];
-                      })
-                      .finally(() => {
-                        PureHttp.isRefreshing = false;
-                      });
-                  }
-                  resolve(PureHttp.retryOriginalRequest(config));
-                } else {
-                  config.headers["Authorization"] = formatToken(
-                    data.accessToken
-                  );
-                  resolve(config);
-                }
-              } else {
-                resolve(config);
-              }
-            });
+        const url = config.url.replace(
+          "{channelId}",
+          storage.getItem("channel_id")
+        );
+        if (config.url.indexOf("/user/login") == -1) {
+          config.headers["x-auth-token"] = getToken();
+        }
+        config.url = url;
+        return config;
       },
       error => {
         return Promise.reject(error);
@@ -123,6 +98,7 @@ class PureHttp {
         const $config = response.config;
         // 关闭进度条动画
         NProgress.done();
+        response.data.headers = response.headers;
         // 优先判断post/get等方法是否传入回调，否则执行初始化设置等回调
         if (typeof $config.beforeResponseCallback === "function") {
           $config.beforeResponseCallback(response);
@@ -136,6 +112,22 @@ class PureHttp {
       },
       (error: PureHttpError) => {
         const $error = error;
+        switch (error.status) {
+          case 400:
+            // redirect('/400')
+            break;
+          case 403:
+            useUserStoreHook().logOut();
+            break;
+          case 401:
+            useUserStoreHook().logOut();
+            break;
+          case 502:
+            // redirect('/site/login/')
+            break;
+          default:
+            break;
+        }
         $error.isCancelRequest = Axios.isCancel($error);
         // 关闭进度条动画
         NProgress.done();

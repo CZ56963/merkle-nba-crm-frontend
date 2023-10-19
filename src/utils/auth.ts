@@ -1,6 +1,7 @@
 import Cookies from "js-cookie";
 import { storageSession } from "@pureadmin/utils";
 import { useUserStoreHook } from "@/store/modules/user";
+import { UserResult } from "@/api/user";
 
 export interface DataInfo<T> {
   /** token */
@@ -16,14 +17,14 @@ export interface DataInfo<T> {
 }
 
 export const sessionKey = "user-info";
-export const TokenKey = "authorized-token";
+export const TokenKey = "x-auth-token";
 
 /** 获取`token` */
 export function getToken(): DataInfo<number> {
   // 此处与`TokenKey`相同，此写法解决初始化时`Cookies`中不存在`TokenKey`报错
   return Cookies.get(TokenKey)
     ? JSON.parse(Cookies.get(TokenKey))
-    : storageSession().getItem(sessionKey);
+    : storageSession().getItem(TokenKey);
 }
 
 /**
@@ -32,32 +33,43 @@ export function getToken(): DataInfo<number> {
  * 将`accessToken`、`expires`这两条信息放在key值为authorized-token的cookie里（过期自动销毁）
  * 将`username`、`roles`、`refreshToken`、`expires`这四条信息放在key值为`user-info`的sessionStorage里（浏览器关闭自动销毁）
  */
-export function setToken(data: DataInfo<Date>) {
-  let expires = 0;
-  const { accessToken, refreshToken } = data;
-  expires = new Date(data.expires).getTime(); // 如果后端直接设置时间戳，将此处代码改为expires = data.expires，然后把上面的DataInfo<Date>改成DataInfo<number>即可
-  const cookieString = JSON.stringify({ accessToken, expires });
-
-  expires > 0
-    ? Cookies.set(TokenKey, cookieString, {
-        expires: (expires - Date.now()) / 86400000
-      })
-    : Cookies.set(TokenKey, cookieString);
+export function setToken(data: UserResult) {
+  const format = channels => {
+    const tmp = [];
+    channels.forEach((channel, index) => {
+      let selected = false;
+      if (index == 0) {
+        selected = true;
+      }
+      tmp.push({
+        id: channel.id,
+        nickName: channel.nickName,
+        alias: channel.alias,
+        headImg: channel.headImg,
+        selected: selected
+      });
+    });
+    return tmp;
+  };
 
   function setSessionKey(username: string, roles: Array<string>) {
     useUserStoreHook().SET_USERNAME(username);
     useUserStoreHook().SET_ROLES(roles);
     storageSession().setItem(sessionKey, {
-      refreshToken,
-      expires,
       username,
       roles
     });
+    storageSession().setItem(TokenKey, data.headers[TokenKey]);
+    storageSession().setItem("account_id", data.data.accountId);
+    if (data.data.pbNos.length > 0) {
+      storageSession().setItem("channel_id", data.data.pbNos[0].id);
+    }
+    storageSession().setItem("channels", format(data.data.pbNos));
   }
 
-  if (data.username && data.roles) {
-    const { username, roles } = data;
-    setSessionKey(username, roles);
+  if (data.data.name && data.data.roles) {
+    const { name, roles } = data.data;
+    setSessionKey(name, roles);
   } else {
     const username =
       storageSession().getItem<DataInfo<number>>(sessionKey)?.username ?? "";
